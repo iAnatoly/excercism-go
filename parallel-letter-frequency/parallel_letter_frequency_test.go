@@ -1,7 +1,10 @@
 package letter
 
 import (
+	"github.com/tjarratt/babble"
+	"os"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -11,34 +14,27 @@ import (
 // Perform this exercise on parallelism using Go concurrency features.
 // Make concurrent calls to Frequency and combine results to obtain the answer.
 
-var (
-	euro = `Freude schöner Götterfunken
-Tochter aus Elysium,
-Wir betreten feuertrunken,
-Himmlische, dein Heiligtum!
-Deine Zauber binden wieder
-Was die Mode streng geteilt;
-Alle Menschen werden Brüder,
-Wo dein sanfter Flügel weilt.`
+const numDict int = 16
+const dictSize int = 1000
 
-	dutch = `Wilhelmus van Nassouwe
-ben ik, van Duitsen bloed,
-den vaderland getrouwe
-blijf ik tot in den dood.
-Een Prinse van Oranje
-ben ik, vrij, onverveerd,
-den Koning van Hispanje
-heb ik altijd geëerd.`
+var randomLetters []string
+var randomLettersJoined string
 
-	us = `O say can you see by the dawn's early light,
-What so proudly we hailed at the twilight's last gleaming,
-Whose broad stripes and bright stars through the perilous fight,
-O'er the ramparts we watched, were so gallantly streaming?
-And the rockets' red glare, the bombs bursting in air,
-Gave proof through the night that our flag was still there;
-O say does that star-spangled banner yet wave,
-O'er the land of the free and the home of the brave?`
-)
+func TestMain(m *testing.M) {
+	babbler := babble.NewBabbler()
+	babbler.Separator = " "
+	babbler.Count = dictSize
+
+	randomLetters = make([]string, dictSize)
+
+	for i := 0; i < numDict; i++ {
+		randomLetters[i] = babbler.Babble()
+	}
+
+	randomLettersJoined = strings.Join(randomLetters[:], "")
+
+	os.Exit(m.Run())
+}
 
 func OriginalFrequency(s string) FreqMap {
 	m := FreqMap{}
@@ -49,16 +45,16 @@ func OriginalFrequency(s string) FreqMap {
 }
 
 func TestConcurrentFrequency(t *testing.T) {
-	seq := OriginalFrequency(euro + dutch + us)
-	con := ConcurrentFrequency([]string{euro, dutch, us})
+	seq := OriginalFrequency(randomLettersJoined)
+	con := ConcurrentFrequency(randomLetters)
 	if !reflect.DeepEqual(con, seq) {
 		t.Fatal("ConcurrentFrequency wrong result")
 	}
 }
 
 func TestSequentialFrequency(t *testing.T) {
-	oSeq := OriginalFrequency(euro + dutch + us)
-	seq := Frequency(euro + dutch + us)
+	oSeq := OriginalFrequency(randomLettersJoined)
+	seq := Frequency(randomLettersJoined)
 	if !reflect.DeepEqual(oSeq, seq) {
 		t.Fatal("Frequency wrong result")
 	}
@@ -66,12 +62,18 @@ func TestSequentialFrequency(t *testing.T) {
 
 func BenchmarkSequentialFrequency(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		Frequency(euro + dutch + us)
+		Frequency(randomLettersJoined)
 	}
 }
 
-func BenchmarkConcurrentFrequency(b *testing.B) {
+func BenchmarkConcurrentLarge(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		ConcurrentFrequency([]string{euro, dutch, us})
+		ConcurrentFrequency(randomLetters)
+	}
+}
+
+func BenchmarkMutexConcurrentLarge(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		MutexConcurrentFrequency(randomLetters)
 	}
 }
