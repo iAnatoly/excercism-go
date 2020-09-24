@@ -17,9 +17,11 @@ func Frequency(s string) FreqMap {
 	return m
 }
 
-// naiveConcurrentFrequency is a aaive implementation w/o concurrency.
+// --- approach 1 - bruteforce
+// naiveConcurrentFrequency is a naive implementation w/o concurrency.
 // Not used anywhere, created just for reference.
 // Curiosly enough, this naive implementation passes the benchmarks.
+// BenchmarkConcurrentFrequency-16    	   33374	     35933 ns/op	    2099 B/op	      12 allocs/op
 func naiveConcurrentFrequency(ss []string) FreqMap {
 	m := FreqMap{}
 	for _, s := range ss {
@@ -30,6 +32,7 @@ func naiveConcurrentFrequency(ss []string) FreqMap {
 	return m
 }
 
+// -------------------- approach 2 - mutex + waitgroup ----------------------
 // safeMap is a dataobject to keep mutex, waitgroup and hashmap together
 type safeMap struct {
 	freqmap FreqMap
@@ -49,10 +52,11 @@ func safeCount(s string, sMap *safeMap) {
 	}
 }
 
-// ConcurrentFrequency counts the letter frequency on an array of strings
+// MutexConcurrentFrequency counts the letter frequency on an array of strings
 // Each elemet in the arry of strings is processed concurrently
-// ConcurrentFrequency returns a map of letters (runes) to their respective frequency
-func ConcurrentFrequency(ss []string) FreqMap {
+// MutexConcurrentFrequency returns a map of letters (runes) to their respective frequency
+// BenchmarkConcurrentFrequency-16    	   19760	     61115 ns/op	    2132 B/op	      13 allocs/op
+func MutexConcurrentFrequency(ss []string) FreqMap {
 	smap := safeMap{freqmap: make(FreqMap)}
 
 	for _, s := range ss {
@@ -61,4 +65,33 @@ func ConcurrentFrequency(ss []string) FreqMap {
 	}
 	smap.wait.Wait() // wait for all SafeCount threads to finish
 	return smap.freqmap
+}
+
+// ------------------ approach 3 - channels and waitgroups and merge ---------------------
+func channelCount(s string, freqChan chan FreqMap) {
+	freqmap := FreqMap{}
+	for _, r := range s {
+		freqmap[r]++
+	}
+	freqChan <- freqmap
+}
+
+// ConcurrentFrequency is a function implementing conncurrent frequency calculation.
+// The results are sent to the paret function via a channel
+// BenchmarkConcurrentFrequency-16    	   22984	     51336 ns/op	    8328 B/op	      47 allocs/op
+func ConcurrentFrequency(ss []string) FreqMap {
+	result := FreqMap{}
+	channels := make([]chan FreqMap, len(ss))
+
+	for i := 0; i < len(ss); i++ {
+		channels[i] = make(chan FreqMap)
+		go channelCount(ss[i], channels[i])
+	}
+	for _, m := range channels {
+		for k, v := range <-m {
+			result[k] += v
+		}
+	}
+
+	return result
 }
