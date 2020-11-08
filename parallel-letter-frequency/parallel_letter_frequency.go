@@ -16,6 +16,7 @@ BenchmarkConcurrentLarge-16                    	    1170	   1027587 ns/op	  1231
 package letter
 
 import (
+	"runtime"
 	"sync"
 )
 
@@ -67,14 +68,6 @@ func MutexConcurrentFrequency(ss []string) FreqMap {
 }
 
 // ------------------ approach 2 - multiple channels and merge ---------------------
-func channelCount(s string, freqChan chan FreqMap) {
-	freqmap := FreqMap{}
-	for _, r := range s {
-		freqmap[r]++
-	}
-	freqChan <- freqmap
-}
-
 // MultipleChannelsConcurrentFrequency is a function implementing conncurrent frequency calculation.
 // The results are sent to the paret function via a channel (channel per goroutine)
 func MultipleChannelsConcurrentFrequency(ss []string) FreqMap {
@@ -83,7 +76,9 @@ func MultipleChannelsConcurrentFrequency(ss []string) FreqMap {
 
 	for i := 0; i < len(ss); i++ {
 		channels[i] = make(chan FreqMap)
-		go channelCount(ss[i], channels[i])
+		go func(s string, channel chan FreqMap) {
+			channel <- Frequency(s)
+		}(ss[i], channels[i])
 	}
 	for _, m := range channels {
 		for k, v := range <-m {
@@ -101,12 +96,18 @@ func MultipleChannelsConcurrentFrequency(ss []string) FreqMap {
 // The results are sent to the paret function via a ibuffered channel (shared across all goroutines)
 func ConcurrentFrequency(ss []string) FreqMap {
 	result := FreqMap{}
-	channel := make(chan FreqMap, len(ss))
-
-	for i := 0; i < len(ss); i++ {
-		go channelCount(ss[i], channel)
+	concurrency := runtime.NumCPU()
+	if concurrency > 10 {
+		concurrency = 10
 	}
-	for i := 0; i < len(ss); i++ {
+	channel := make(chan FreqMap, concurrency)
+
+	for _, s := range ss {
+		go func(s string) {
+			channel <- Frequency(s)
+		}(s)
+	}
+	for range ss {
 		for k, v := range <-channel {
 			result[k] += v
 		}
